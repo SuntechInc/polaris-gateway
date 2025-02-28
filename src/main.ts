@@ -1,6 +1,10 @@
 import { NestFactory } from '@nestjs/core';
-import { FastifyAdapter, NestFastifyApplication } from '@nestjs/platform-fastify';
+import {
+  FastifyAdapter,
+  NestFastifyApplication,
+} from '@nestjs/platform-fastify';
 import { GatewayModule } from './gateway.module';
+import { setupSwagger } from './config/swagger.config';
 
 async function bootstrap() {
   const app = await NestFactory.create<NestFastifyApplication>(
@@ -9,6 +13,8 @@ async function bootstrap() {
   );
 
   app.setGlobalPrefix('/api');
+
+  setupSwagger(app);
 
   const PORT = process.env.PORT || 3000;
   await app.listen(PORT);
