@@ -1,0 +1,69 @@
+name: Deploy Production
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  build-and-deploy-prod:
+    runs-on: ubuntu-latest
+
+    steps:
+      # 1️⃣ Checkout do código
+      - name: Checkout do repositório
+        uses: actions/checkout@v3
+
+      # 2️⃣ Login no Docker Hub
+      - name: Login no Docker Hub
+        env:
+          DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
+          DOCKER_ACCESS_TOKEN: ${{ secrets.DOCKER_ACCESS_TOKEN }}
+        run: |
+          echo "🔑 Logando no Docker Hub..."
+          echo "$DOCKER_ACCESS_TOKEN" | docker login -u "$DOCKER_USERNAME" --password-stdin
+          echo "✅ Login bem-sucedido!"
+
+      # 3️⃣ Build e Push da Imagem Docker
+      - name: Build e Push da imagem para Produção
+        run: |
+          echo "🚀 Construindo imagem Docker do Gateway..."
+          docker build -t ${{ secrets.DOCKER_USERNAME }}/polaris-gateway:prod .
+          
+          echo "📤 Enviando imagem para Docker Hub..."
+          docker push ${{ secrets.DOCKER_USERNAME }}/polaris-gateway:prod
+          
+          echo "✅ Imagem enviada com sucesso!"
+
+      # 4️⃣ Deploy via SSH para VPS
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          script: |
+            echo "🔗 Conectado à VPS, iniciando deploy do Gateway..."
+
+            echo "📥 Baixando nova versão da imagem..."
+            docker pull ${{ secrets.DOCKER_USERNAME }}/polaris-gateway:prod
+
+            echo "🌐 Garantindo que a network polaris_network existe..."
+            docker network inspect polaris_network >/dev/null 2>&1 || docker network create polaris_network
+
+            if [ "$(docker ps -aq -f name=polaris_gateway)" ]; then
+              echo "🛑 Parando e removendo container antigo do Gateway..."
+              docker stop polaris_gateway
+              docker rm polaris_gateway
+            else
+              echo "⚠️ Nenhum container do Gateway encontrado, pulando remoção."
+            fi
+
+            echo "🚀 Iniciando novo container de produção para o Gateway..."
+            docker run -d \
+              --network=polaris_network \
+              -p 3000:3000 \
+              --name polaris_gateway \
+              ${{ secrets.DOCKER_USERNAME }}/polaris-gateway:prod
+
+            echo "✅ Deploy do Gateway finalizado com sucesso!"
