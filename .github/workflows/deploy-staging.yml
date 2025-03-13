@@ -1,0 +1,56 @@
+name: Deploy Homolog
+
+on:
+  push:
+    branches:
+      - develop  # Essa é a branch que dispara o deploy de homolog
+
+jobs:
+  build-and-deploy-homolog:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      # 1. Login no Docker Hub
+      - name: Login no Docker Hub
+        env:
+          DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
+          DOCKER_ACCESS_TOKEN: ${{ secrets.DOCKER_ACCESS_TOKEN }}
+        run: |
+          echo "🔑 Logando no Docker Hub..."
+          echo "$DOCKER_ACCESS_TOKEN" | docker login -u "$DOCKER_USERNAME" --password-stdin
+          echo "✅ Login bem-sucedido!"
+
+      # 2. Build e push da imagem com tag 'homolog'
+      - name: Build & push (Homolog)
+        run: |
+          echo "🔨 Buildando imagem de Homolog..."
+          docker build -t ${{ secrets.DOCKER_USERNAME }}/polaris-gateway:homolog .
+          docker push ${{ secrets.DOCKER_USERNAME }}/polaris-gateway:homolog
+
+      # 3. SSH na VPS e rodar container de homolog
+      - name: Deploy Homolog via SSH
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          script: |
+            echo "📥 Baixando nova versão da imagem de Homolog..."
+            docker pull ${{ secrets.DOCKER_USERNAME }}/polaris-gateway:homolog
+
+            echo "🛑 Parando e removendo container antigo de Homolog (se existir)..."
+            docker stop polaris_gateway_homolog || true
+            docker rm polaris_gateway_homolog || true
+
+            echo "🚀 Iniciando novo container de Homolog..."
+            # Observação: Usamos -p 3001:3000 para não conflitar com a porta 3000 do ambiente de prod
+            docker run -d \
+              --network polaris_network \
+              -p 3001:3000 \
+              --name polaris_gateway_homolog \
+              ${{ secrets.DOCKER_USERNAME }}/polaris-gateway:homolog
+
+            echo "✅ Deploy de Homolog finalizado!"
