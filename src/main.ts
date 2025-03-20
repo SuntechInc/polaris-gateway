@@ -17,7 +17,8 @@ async function bootstrap() {
   setupSwagger(app);
 
   const PORT = process.env.PORT || 3000;
-  await app.listen(PORT);
+  
+  await app.listen(PORT, '0.0.0.0');
   console.log(`🚀 Polaris API Gateway is running on http://localhost:3000`);
 }
 bootstrap();
