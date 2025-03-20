@@ -1,0 +1,52 @@
+name: Deploy Polaris Gateway
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+
+env:
+  IMAGE_NAME: lucassuntech/polaris-gateway
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout do Código
+        uses: actions/checkout@v3
+
+      - name: Login no Docker Hub
+        run: echo "${{ secrets.DOCKER_ACCESS_TOKEN }}" | docker login -u "${{ secrets.DOCKER_USERNAME }}" --password-stdin
+
+      - name: Construir a Imagem Docker
+        run: |
+          if [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
+            TAG="latest"
+          else
+            TAG="develop"
+          fi
+          docker build -t $IMAGE_NAME:$TAG .
+
+      - name: Push da Imagem para o Docker Hub
+        run: |
+          if [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
+            TAG="latest"
+          else
+            TAG="develop"
+          fi
+          docker push $IMAGE_NAME:$TAG
+
+  deploy-to-k8s:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    steps:
+      - name: Conectar na VPS e Aplicar Deploy no Kubernetes
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          script: |
+            kubectl rollout restart deployment gateway-deployment -n production
+            kubectl rollout restart deployment gateway-deployment -n homolog
