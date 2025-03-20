@@ -11,7 +11,9 @@
     
     # Copia o restante do código
     COPY . .
-    RUN pnpm run build
+    
+    # Certifique-se de que a pasta dist é gerada corretamente
+    RUN pnpm run build && ls -la dist/src/
     
     # ---- STAGE 2: Production ----
     FROM node:22.13.1-alpine
@@ -27,9 +29,6 @@
     # Copia o código compilado da 1ª fase
     COPY --from=builder /app/dist ./dist
     
-    # Expor a porta do Gateway (ex.: 3000)
-    EXPOSE 3000
-    
-    # Comando final para iniciar o Gateway
-    CMD ["node", "dist/main.js"]
+    # Corrigir o CMD para rodar do local correto
+    CMD ["node", "dist/src/main.js"]
     
