@@ -1,0 +1,54 @@
+name: Deploy Production
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  build-and-deploy-prod:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      # 1. Login no Docker Hub
+      - name: Login no Docker Hub
+        env:
+          DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
+          DOCKER_ACCESS_TOKEN: ${{ secrets.DOCKER_ACCESS_TOKEN }}
+        run: |
+          echo "🔑 Logando no Docker Hub..."
+          echo "$DOCKER_ACCESS_TOKEN" | docker login -u "$DOCKER_USERNAME" --password-stdin
+          echo "✅ Login bem-sucedido!"
+
+      # 2. Build e push da imagem
+      - name: Build & push
+        run: |
+          docker build -t ${{ secrets.DOCKER_USERNAME }}/polaris-gateway:prod .
+          docker push ${{ secrets.DOCKER_USERNAME }}/polaris-gateway:prod
+
+      # 3. SSH na VPS e rodar container
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          script: |
+            echo "📥 Baixando nova versão da imagem do Polaris Gateway..."
+            docker pull ${{ secrets.DOCKER_USERNAME }}/polaris-gateway:prod
+
+            echo "🛑 Parando e removendo container antigo do Gateway..."
+            docker stop polaris_gateway || true
+            docker rm polaris_gateway || true
+
+            echo "🚀 Iniciando novo container do Gateway..."
+            docker run -d \
+              --network polaris_network \
+              -p 3000:3000 \
+              --name polaris_gateway \
+              ${{ secrets.DOCKER_USERNAME }}/polaris-gateway:prod
+
+            echo "✅ Deploy finalizado!"
